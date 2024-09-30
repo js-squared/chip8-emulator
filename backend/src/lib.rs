@@ -1,3 +1,5 @@
+use rand::random;
+
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
@@ -285,6 +287,168 @@ impl Processor {
                 let nnn = opcode & 0xFFF;
 
                 self.pc = (self.v_reg[0] as u16) + nnn;
+            },
+
+            // (CXNN) VX = rand() & 0xNN
+            (0xC, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (opcode & 0xFF) as u8;
+
+                let random_integer: u8 = random();
+
+                self.v_reg[x] = random_integer & nn;
+            },
+
+            // (DXYN) Draw sprite at (VX, VY)
+            //        Sprite is 0xN pixels tall, on/off based on value in I,
+            //        VF set if any pixels flipped (from on to off)
+            (0xD, _, _, _) => {
+                // get coords where sprite will be drawn
+                let x_coord = self.v_reg[digit2 as usize] as u16;
+                let y_coord = self.v_reg[digit3 as usize] as u16;
+                let num_rows = digit4;
+
+                let mut flipped = false;
+
+                for y_line in 0..num_rows {
+                    let address = self.i_reg + y_line as u16;
+                    let pixels = self.ram[address as usize];
+
+                    for x_line in 0..8 {
+                        // use mask to get current pixel's bit
+                        if (pixels & (0b1000_0000 >> x_line)) != 0 {
+                            // sprites wrap around screen
+                            let x = (x_coord + x_line) as usize
+                                    % SCREEN_WIDTH;
+                            let y = (y_coord + y_line) as usize
+                                    % SCREEN_HEIGHT;
+
+                            // pixel's index in 1D array
+                            let pixel_index = x + SCREEN_WIDTH * y;
+
+                            if self.screen[pixel_index] {
+                                flipped = true;
+                            }
+
+                            self.screen[pixel_index] ^= true;
+                        }
+                    }
+                }
+
+                if flipped {
+                    self.v_reg[0xF] = 1;
+                } else {
+                    self.v_reg[0xF] = 0;
+                }
+            },
+
+            // (EX9E) Skip if key index in VX is pressed
+            (0xE, _, 9, 0xE) => {
+                let vx = self.v_reg[digit2 as usize];
+
+                if self.keys[vx as usize] {
+                    self.pc += 2;
+                }
+            },
+
+            // (EXA1) Skip if key index in VX isn't pressed
+            (0xE, _, 0xA, 1) => {
+                let vx = self.v_reg[digit2 as usize];
+
+                if !self.keys[vx as usize] {
+                    self.pc += 2;
+                }
+            },
+
+            // (FX07) VX = Delay Timer
+            (0xF, _, 0, 7) => {
+                let x = digit2 as usize;
+
+                self.v_reg[x] = self.dt;
+            },
+
+            // (FX0A) Waits for keypress, stores index in VX
+            //        Blocking operation
+            (0xF, _, 0, 0xA) => {
+                let x = digit2 as usize;
+
+                let mut pressed = false;
+
+                for i in 0..self.keys.len() {
+                    if self.keys[i] {
+                        self.v_reg[x] = i as u8;
+                        pressed = true;
+                        break;
+                    }
+                }
+
+                // redo if no button pressed
+                if !pressed {
+                    self.pc -= 2;
+                }
+            },
+
+            // (FX15) Delay Timer = VX
+            (0xF, _, 1, 5) => {
+                let x = digit2 as usize;
+
+                self.dt = self.v_reg[x];
+            },
+
+            // (FX18) Sound Timer = VX
+            (0xF, _, 1, 8) => {
+                let x = digit2 as usize;
+
+                self.st = self.v_reg[x];
+            },
+
+            // (FX1E) I += VX
+            (0xF, _, 1, 0xE) => {
+                let x = digit2 as usize;
+
+                self.i_reg = self.i_reg.wrapping_add(self.v_reg[x]);
+            },
+
+            // (FX29) Set I to address of font character in VX
+            (0xF, _, 2, 9) => {
+                let x = digit2 as usize;
+
+                self.i_reg = (self.v_reg[x] as u16) * 5;
+            },
+
+            // (FX33) Stores BCD encoding of VX into I
+            (0xF, _, 3, 3) => {
+                let vx = self.v_reg[digit2 as usize];
+
+                let hundreds = (vx - vx % 100) / 100;
+                let ones = vx % 10;
+                let tens = (vx - 100 * hundreds - ones) / 10;
+
+                self.ram[self.i_reg as usize] = hundreds;
+                self.ram[(self.i_reg + 1) as usize] = tens;
+                self.ram[(self.i_reg + 2) as usize] = ones;
+            },
+
+            // (FX55) Stores V0 thru VX into RAM address starting at I
+            //        Inclusive range
+            (0xF, _, 5, 5) => {
+                let x = digit2 as usize;
+                let i_reg_value = self.i_reg as usize;
+
+                for i in 0..=x {
+                    self.ram[i_reg_value + i] = self.v_reg[i];
+                }
+            },
+
+            // (FX65) Fills V0 thru VX with RAM values starting at address in I
+            //        Inclusive
+            (0xF, _, 6, 5) => {
+                let x = digit2 as usize;
+                let i_reg_value = self.i_reg as usize;
+
+                for i in 0..=x {
+                    self.v_reg[i] = self.ram[i_reg_value + i];
+                }
             },
 
             // TODO behavior for invalid opcode? interpreter will only reach
