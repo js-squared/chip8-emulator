@@ -28,6 +28,8 @@ const DIGIT_SPRITES: [u8; DIGIT_SPRITES_SIZE] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80 // F
 ];
 
+// TODO add flags for when sound should play and for runtime errors caused
+//      by bugs in the input ROM (should be similar to how screen is used)
 pub struct Processor {
     pc: u16, // program counter
     ram: [u8; RAM_SIZE],
@@ -90,8 +92,205 @@ impl Processor {
     pub fn tick(&mut self) {
         // Fetch
         let opcode = self.fetch();
-        // TODO Decode
-        // TODO Execute
+        // Decode and Execute
+        self.execute(opcode);
+    }
+
+    fn execute(&mut self, opcode: u16) {
+        let digit1 = (opcode & 0xF000) >> (3*4);
+        let digit2 = (opcode & 0x0F00) >> (2*4);
+        let digit3 = (opcode & 0x00F0) >> 4;
+        let digit4 = opcode & 0x000F;
+
+        match (digit1, digit2, digit3, digit4) {
+            // Nop
+            (0, 0, 0, 0) => return,
+
+            // Clear screen
+            (0, 0, 0xE, 0) => {
+                self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+            },
+
+            // Return from subroutine
+            (0, 0, 0xE, 0xE) => {
+                self.pc = self.pop();
+            },
+
+            // (1NNN) Jump to address 0xNNN
+            (1, _, _, _) => {
+                self.pc = opcode & 0xFFF;
+            },
+
+            // (2NNN) Call 0xNNN
+            //        Enter subroutine at 0xNNN, adding current PC to stack
+            //        so we can return here
+            (2, _, _, _) => {
+                self.push(self.pc);
+                self.pc = opcode & 0xFFF;
+            },
+
+            // (3XNN) Skip if VX == 0xNN
+            (3, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (opcode & 0xFF) as u8;
+                if self.v_reg[x] == nn {
+                    self.pc += 2;
+                }
+            },
+
+            // (4XNN) Skip if VX != 0xNN
+            (4, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (opcode & 0xFF) as u8;
+                if self.v_reg[x] != nn {
+                    self.pc += 2
+                }
+            },
+
+            // (5XY0) Skip if VX == VY
+            (5, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                if self.v_reg[x] == self.v_reg[y] {
+                    self.pc += 2
+                }
+            },
+
+            // (6XNN) VX = 0xNN
+            (6, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (opcode & 0xFF) as u8;
+                self.v_reg[x] = nn;
+            },
+
+            // (7XNN) VX += 0xNN
+            //        Doesn't affect carry flag
+            (7, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (opcode & 0xFF) as u8;
+                self.v_reg[x] = self.v_reg[x].wrapping_add(nn);
+            },
+
+            // (8XY0) VX = VY
+            (8, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] = self.v_reg[y];
+            },
+
+            // (8XY1) VX |= VY
+            (8, _, _, 1) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] |= self.v_reg[y];
+            },
+
+            // (8XY2) VX &= VY
+            (8, _, _, 2) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] &= self.v_reg[y];
+            },
+
+            // (8XY3) VX ^= VY
+            (8, _, _, 3) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_reg[x] ^= self.v_reg[y];
+            },
+
+            // (8XY4) VX += VY
+            //        Sets VF if carry
+            (8, _, _, 4) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[x]
+                                          .overflowing_add(self.v_reg[y]);
+                let new_vf = if carry { 1 } else { 0 };
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            },
+
+            // (8XY5) VX -= VY
+            //        Clears VF if borrow
+            (8, _, _, 5) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[x]
+                                          .overflowing_sub(self.v_reg[y]);
+                let new_vf = if carry { 0 } else { 1 };
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            },
+
+            // (8XY6) VX >>= 1
+            //        Stores dropped bit in VF
+            (8, _, _, 6) => {
+                let x = digit2 as usize;
+
+                let dropped_bit = self.v_reg[x] & 1;
+
+                self.v_reg[x] >>= 1;
+                self.v_reg[0xF] = dropped_bit;
+            },
+
+            // (8XY7) VX = VY - VX
+            //        Clears VF if borrow
+            (8, _, _, 7) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_reg[y]
+                                          .overflowing_sub(self.v_reg[x]);
+                let new_vf = if carry { 1 } else { 0 };
+
+                self.v_reg[x] = new_vx;
+                self.v_reg[0xF] = new_vf;
+            },
+
+            // (8XYE) VX <<= VY
+            //        Store dropped bit in VF
+            (8, _, _, 0xE) => {
+                let x = digit2 as usize;
+
+                let dropped_bit = (self.v_reg[x] >> 7) & 1;
+
+                self.v_reg[x] <<= 1;
+                self.v_reg[0xF] = dropped_bit;
+            },
+
+            // (9XY0) Skip if VX != VY
+            (9, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if self.v_reg[x] != self.v_reg[y] {
+                    self.pc += 2
+                }
+            },
+
+            // (ANNN) I = 0xNNN
+            (0xA, _, _, _) => {
+                let nnn = opcode & 0xFFF;
+
+                self.i_reg = nnn;
+            },
+
+            // (BNNN) Jump to V0 + 0xNNN
+            (0xB, _, _, _) => {
+                let nnn = opcode & 0xFFF;
+
+                self.pc = (self.v_reg[0] as u16) + nnn;
+            },
+
+            // TODO behavior for invalid opcode? interpreter will only reach
+            //      the bottom catch-all pattern if there is a bug in the ROM
+            (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", opcode),
+        }
     }
 
     fn fetch(&mut self) -> u16 {
