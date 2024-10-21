@@ -420,7 +420,7 @@ impl Processor {
             (0xF, _, 1, 0xE) => {
                 let x = digit2 as usize;
 
-                self.i_reg = self.i_reg.wrapping_add(self.v_reg[x]);
+                self.i_reg = self.i_reg.wrapping_add(self.v_reg[x] as u16);
             },
 
             // (FX29) Set I to address of font character in VX
