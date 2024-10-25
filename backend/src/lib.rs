@@ -30,12 +30,13 @@ const DIGIT_SPRITES: [u8; DIGIT_SPRITES_SIZE] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80 // F
 ];
 
-// TODO add flags for when sound should play and for runtime errors caused
+// TODO add flags for runtime errors caused
 //      by bugs in the input ROM (should be similar to how screen is used)
 pub struct Processor {
     pc: u16, // program counter
     ram: [u8; RAM_SIZE],
     screen: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
+    sound: bool,
     v_reg: [u8; NUM_REGS],
     i_reg: u16,
     sp: u16, // stack pointer
@@ -51,6 +52,7 @@ impl Processor {
             pc: START_ADDRESS,
             ram: [0; RAM_SIZE],
             screen: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
+            sound: false,
             v_reg: [0; NUM_REGS],
             i_reg: 0,
             sp: 0,
@@ -68,6 +70,7 @@ impl Processor {
         self.pc = START_ADDRESS;
         self.ram = [0; RAM_SIZE];
         self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+        self.sound = false;
         self.v_reg = [0; NUM_REGS];
         self.i_reg = 0;
         self.sp = 0;
@@ -100,6 +103,10 @@ impl Processor {
 
     pub fn get_display(&self) -> &[bool] {
         &self.screen
+    }
+
+    pub fn get_sound(&self) -> bool {
+        self.sound
     }
 
     pub fn keypress(&mut self, index: usize, pressed: bool) {
@@ -484,9 +491,11 @@ impl Processor {
             self.dt -= 1;
         }
 
+        self.sound = false;
         if self.st > 0 {
             if self.st == 1 {
-                // TODO make BEEP sound
+                // make BEEP sound
+                self.sound = true;
             }
             self.st -= 1;
         }

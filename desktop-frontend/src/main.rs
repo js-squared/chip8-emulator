@@ -8,11 +8,34 @@ use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 use sdl2::keyboard::Keycode;
+use sdl2::audio::{AudioCallback, AudioSpecDesired};
 
 const SCALE: u32 = 15;
 const WINDOW_WIDTH: u32 = (SCREEN_WIDTH as u32) * SCALE;
 const WINDOW_HEIGHT: u32 = (SCREEN_HEIGHT as u32) * SCALE;
 const TICKS_PER_FRAME: usize = 10;
+
+struct SquareWave {
+    phase_inc: f32,
+    phase: f32,
+    volume: f32,
+}
+
+impl AudioCallback for SquareWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        // Generate a square wave
+        for x in out.iter_mut() {
+            *x = if self.phase <= 0.5 {
+                self.volume
+            } else {
+                -self.volume
+            };
+            self.phase = (self.phase + self.phase_inc) % 1.0;
+        }
+    }
+}
 
 fn main() {
     let args: Vec<_> = env::args().collect();
@@ -23,6 +46,8 @@ fn main() {
 
     // Setup SDL
     let sdl_context = sdl2::init().unwrap();
+
+    // Setup video
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window("Chip-8 Emulator",
                                         WINDOW_WIDTH,
@@ -35,6 +60,27 @@ fn main() {
     canvas.clear();
     canvas.present();
 
+    // Setup audio
+    let audio_subsystem = sdl_context.audio().unwrap();
+
+    let desired_spec = AudioSpecDesired {
+        freq: Some(44_100),
+        channels: Some(1), // mono
+        samples: None,     // default sample size
+    };
+
+    let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+        // initialize the audio callback
+        SquareWave {
+            phase_inc: 440.0 / spec.freq as f32,
+            phase: 0.0,
+            volume: 0.25,
+        }
+    }).unwrap();
+
+    let mut previous_sound = false;
+    let mut sound: bool;
+
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut chip8 = Processor::new();
@@ -45,8 +91,6 @@ fn main() {
     rom.read_to_end(&mut buffer).unwrap();
     chip8.load(&buffer);
 
-    // TODO change how often game is ticked
-    // (should be more often than the screen is updated)
     'gameloop: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -72,6 +116,13 @@ fn main() {
         }
         chip8.tick_timers();
         draw_screen(&chip8, &mut canvas);
+        sound = chip8.get_sound();
+        if sound && !previous_sound {
+            device.resume();
+        } else if !sound && previous_sound {
+            device.pause();
+        }
+        previous_sound = sound;
     }
 }
 
