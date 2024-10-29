@@ -1,34 +1,7 @@
+pub mod constants;
+
+use crate::constants::*;
 use rand::random;
-
-pub const SCREEN_WIDTH: usize = 64;
-pub const SCREEN_HEIGHT: usize = 32;
-
-const START_ADDRESS: u16 = 0x200;
-
-const RAM_SIZE: usize = 4096;
-const NUM_REGS: usize = 16;
-const STACK_SIZE: usize = 16;
-const NUM_KEYS: usize = 16;
-
-const DIGIT_SPRITES_SIZE: usize = 16 * 5; // 16 characters of 5 bytes each
-const DIGIT_SPRITES: [u8; DIGIT_SPRITES_SIZE] = [
-    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-    0x20, 0x60, 0x20, 0x20, 0x70, // 1
-    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80 // F
-];
 
 // TODO add flags for runtime errors caused
 //      by bugs in the input ROM (should be similar to how screen is used)
@@ -61,8 +34,7 @@ impl Processor {
             dt: 0,
             st: 0,
         };
-        new_processor.ram[..DIGIT_SPRITES_SIZE]
-                     .copy_from_slice(&DIGIT_SPRITES);
+        new_processor.ram[..DIGIT_SPRITES_SIZE].copy_from_slice(&DIGIT_SPRITES);
         new_processor
     }
 
@@ -78,8 +50,7 @@ impl Processor {
         self.keys = [false; NUM_KEYS];
         self.dt = 0;
         self.st = 0;
-        self.ram[..DIGIT_SPRITES_SIZE]
-            .copy_from_slice(&DIGIT_SPRITES);
+        self.ram[..DIGIT_SPRITES_SIZE].copy_from_slice(&DIGIT_SPRITES);
     }
 
     // TODO: behavior for overflow?
@@ -120,8 +91,8 @@ impl Processor {
     }
 
     fn execute(&mut self, opcode: u16) {
-        let digit1 = (opcode & 0xF000) >> (3*4);
-        let digit2 = (opcode & 0x0F00) >> (2*4);
+        let digit1 = (opcode & 0xF000) >> (3 * 4);
+        let digit2 = (opcode & 0x0F00) >> (2 * 4);
         let digit3 = (opcode & 0x00F0) >> 4;
         let digit4 = opcode & 0x000F;
 
@@ -132,17 +103,17 @@ impl Processor {
             // Clear screen
             (0, 0, 0xE, 0) => {
                 self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
-            },
+            }
 
             // Return from subroutine
             (0, 0, 0xE, 0xE) => {
                 self.pc = self.pop();
-            },
+            }
 
             // (1NNN) Jump to address 0xNNN
             (1, _, _, _) => {
                 self.pc = opcode & 0xFFF;
-            },
+            }
 
             // (2NNN) Call 0xNNN
             //        Enter subroutine at 0xNNN, adding current PC to stack
@@ -150,7 +121,7 @@ impl Processor {
             (2, _, _, _) => {
                 self.push(self.pc);
                 self.pc = opcode & 0xFFF;
-            },
+            }
 
             // (3XNN) Skip if VX == 0xNN
             (3, _, _, _) => {
@@ -159,7 +130,7 @@ impl Processor {
                 if self.v_reg[x] == nn {
                     self.pc += 2;
                 }
-            },
+            }
 
             // (4XNN) Skip if VX != 0xNN
             (4, _, _, _) => {
@@ -168,7 +139,7 @@ impl Processor {
                 if self.v_reg[x] != nn {
                     self.pc += 2
                 }
-            },
+            }
 
             // (5XY0) Skip if VX == VY
             (5, _, _, 0) => {
@@ -177,14 +148,14 @@ impl Processor {
                 if self.v_reg[x] == self.v_reg[y] {
                     self.pc += 2
                 }
-            },
+            }
 
             // (6XNN) VX = 0xNN
             (6, _, _, _) => {
                 let x = digit2 as usize;
                 let nn = (opcode & 0xFF) as u8;
                 self.v_reg[x] = nn;
-            },
+            }
 
             // (7XNN) VX += 0xNN
             //        Doesn't affect carry flag
@@ -192,35 +163,35 @@ impl Processor {
                 let x = digit2 as usize;
                 let nn = (opcode & 0xFF) as u8;
                 self.v_reg[x] = self.v_reg[x].wrapping_add(nn);
-            },
+            }
 
             // (8XY0) VX = VY
             (8, _, _, 0) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
                 self.v_reg[x] = self.v_reg[y];
-            },
+            }
 
             // (8XY1) VX |= VY
             (8, _, _, 1) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
                 self.v_reg[x] |= self.v_reg[y];
-            },
+            }
 
             // (8XY2) VX &= VY
             (8, _, _, 2) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
                 self.v_reg[x] &= self.v_reg[y];
-            },
+            }
 
             // (8XY3) VX ^= VY
             (8, _, _, 3) => {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
                 self.v_reg[x] ^= self.v_reg[y];
-            },
+            }
 
             // (8XY4) VX += VY
             //        Sets VF if carry
@@ -228,13 +199,12 @@ impl Processor {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
 
-                let (new_vx, carry) = self.v_reg[x]
-                                          .overflowing_add(self.v_reg[y]);
+                let (new_vx, carry) = self.v_reg[x].overflowing_add(self.v_reg[y]);
                 let new_vf = if carry { 1 } else { 0 };
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
-            },
+            }
 
             // (8XY5) VX -= VY
             //        Clears VF if borrow
@@ -242,13 +212,12 @@ impl Processor {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
 
-                let (new_vx, carry) = self.v_reg[x]
-                                          .overflowing_sub(self.v_reg[y]);
+                let (new_vx, carry) = self.v_reg[x].overflowing_sub(self.v_reg[y]);
                 let new_vf = if carry { 0 } else { 1 };
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
-            },
+            }
 
             // (8XY6) VX >>= 1
             //        Stores dropped bit in VF
@@ -259,7 +228,7 @@ impl Processor {
 
                 self.v_reg[x] >>= 1;
                 self.v_reg[0xF] = dropped_bit;
-            },
+            }
 
             // (8XY7) VX = VY - VX
             //        Clears VF if borrow
@@ -267,13 +236,12 @@ impl Processor {
                 let x = digit2 as usize;
                 let y = digit3 as usize;
 
-                let (new_vx, carry) = self.v_reg[y]
-                                          .overflowing_sub(self.v_reg[x]);
+                let (new_vx, carry) = self.v_reg[y].overflowing_sub(self.v_reg[x]);
                 let new_vf = if carry { 1 } else { 0 };
 
                 self.v_reg[x] = new_vx;
                 self.v_reg[0xF] = new_vf;
-            },
+            }
 
             // (8XYE) VX <<= VY
             //        Store dropped bit in VF
@@ -284,7 +252,7 @@ impl Processor {
 
                 self.v_reg[x] <<= 1;
                 self.v_reg[0xF] = dropped_bit;
-            },
+            }
 
             // (9XY0) Skip if VX != VY
             (9, _, _, 0) => {
@@ -294,21 +262,21 @@ impl Processor {
                 if self.v_reg[x] != self.v_reg[y] {
                     self.pc += 2
                 }
-            },
+            }
 
             // (ANNN) I = 0xNNN
             (0xA, _, _, _) => {
                 let nnn = opcode & 0xFFF;
 
                 self.i_reg = nnn;
-            },
+            }
 
             // (BNNN) Jump to V0 + 0xNNN
             (0xB, _, _, _) => {
                 let nnn = opcode & 0xFFF;
 
                 self.pc = (self.v_reg[0] as u16) + nnn;
-            },
+            }
 
             // (CXNN) VX = rand() & 0xNN
             (0xC, _, _, _) => {
@@ -318,7 +286,7 @@ impl Processor {
                 let random_integer: u8 = random();
 
                 self.v_reg[x] = random_integer & nn;
-            },
+            }
 
             // (DXYN) Draw sprite at (VX, VY)
             //        Sprite is 0xN pixels tall, on/off based on value in I,
@@ -339,10 +307,8 @@ impl Processor {
                         // use mask to get current pixel's bit
                         if (pixels & (0b1000_0000 >> x_line)) != 0 {
                             // sprites wrap around screen
-                            let x = (x_coord + x_line) as usize
-                                    % SCREEN_WIDTH;
-                            let y = (y_coord + y_line) as usize
-                                    % SCREEN_HEIGHT;
+                            let x = (x_coord + x_line) as usize % SCREEN_WIDTH;
+                            let y = (y_coord + y_line) as usize % SCREEN_HEIGHT;
 
                             // pixel's index in 1D array
                             let pixel_index = x + SCREEN_WIDTH * y;
@@ -361,7 +327,7 @@ impl Processor {
                 } else {
                     self.v_reg[0xF] = 0;
                 }
-            },
+            }
 
             // (EX9E) Skip if key index in VX is pressed
             (0xE, _, 9, 0xE) => {
@@ -370,7 +336,7 @@ impl Processor {
                 if self.keys[vx as usize] {
                     self.pc += 2;
                 }
-            },
+            }
 
             // (EXA1) Skip if key index in VX isn't pressed
             (0xE, _, 0xA, 1) => {
@@ -379,14 +345,14 @@ impl Processor {
                 if !self.keys[vx as usize] {
                     self.pc += 2;
                 }
-            },
+            }
 
             // (FX07) VX = Delay Timer
             (0xF, _, 0, 7) => {
                 let x = digit2 as usize;
 
                 self.v_reg[x] = self.dt;
-            },
+            }
 
             // (FX0A) Waits for keypress, stores index in VX
             //        Blocking operation
@@ -407,35 +373,35 @@ impl Processor {
                 if !pressed {
                     self.pc -= 2;
                 }
-            },
+            }
 
             // (FX15) Delay Timer = VX
             (0xF, _, 1, 5) => {
                 let x = digit2 as usize;
 
                 self.dt = self.v_reg[x];
-            },
+            }
 
             // (FX18) Sound Timer = VX
             (0xF, _, 1, 8) => {
                 let x = digit2 as usize;
 
                 self.st = self.v_reg[x];
-            },
+            }
 
             // (FX1E) I += VX
             (0xF, _, 1, 0xE) => {
                 let x = digit2 as usize;
 
                 self.i_reg = self.i_reg.wrapping_add(self.v_reg[x] as u16);
-            },
+            }
 
             // (FX29) Set I to address of font character in VX
             (0xF, _, 2, 9) => {
                 let x = digit2 as usize;
 
                 self.i_reg = (self.v_reg[x] as u16) * 5;
-            },
+            }
 
             // (FX33) Stores BCD encoding of VX into I
             (0xF, _, 3, 3) => {
@@ -448,7 +414,7 @@ impl Processor {
                 self.ram[self.i_reg as usize] = hundreds;
                 self.ram[(self.i_reg + 1) as usize] = tens;
                 self.ram[(self.i_reg + 2) as usize] = ones;
-            },
+            }
 
             // (FX55) Stores V0 thru VX into RAM address starting at I
             //        Inclusive range
@@ -459,7 +425,7 @@ impl Processor {
                 for i in 0..=x {
                     self.ram[i_reg_value + i] = self.v_reg[i];
                 }
-            },
+            }
 
             // (FX65) Fills V0 thru VX with RAM values starting at address in I
             //        Inclusive
@@ -470,7 +436,7 @@ impl Processor {
                 for i in 0..=x {
                     self.v_reg[i] = self.ram[i_reg_value + i];
                 }
-            },
+            }
 
             // TODO behavior for invalid opcode? interpreter will only reach
             //      the bottom catch-all pattern if there is a bug in the ROM
