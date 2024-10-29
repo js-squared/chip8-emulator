@@ -1,9 +1,6 @@
-mod constants;
+pub mod constants;
 
-use crate::constants::{
-    DIGIT_SPRITES, DIGIT_SPRITES_SIZE, NUM_KEYS, NUM_REGS, RAM_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH,
-    STACK_SIZE, START_ADDRESS,
-};
+use crate::constants::*;
 use rand::random;
 
 // TODO add flags for runtime errors caused
