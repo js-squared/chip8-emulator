@@ -1,6 +1,11 @@
-pub mod constants;
+mod constants;
+
+pub mod display_constants {
+    pub use super::constants::{SCREEN_HEIGHT, SCREEN_WIDTH};
+}
 
 use crate::constants::*;
+
 use rand::random;
 
 // TODO add flags for runtime errors caused
