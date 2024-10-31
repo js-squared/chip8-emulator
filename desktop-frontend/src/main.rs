@@ -10,7 +10,7 @@ use sdl2::video::Window;
 use sdl2::keyboard::Keycode;
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
 
-use backend::constants::{SCREEN_WIDTH, SCREEN_HEIGHT};
+use backend::display_constants::{SCREEN_WIDTH, SCREEN_HEIGHT};
 
 const SCALE: u32 = 15;
 const WINDOW_WIDTH: u32 = (SCREEN_WIDTH as u32) * SCALE;
